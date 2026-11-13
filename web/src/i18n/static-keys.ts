@@ -120,6 +120,9 @@ export const STATIC_I18N_KEYS = [
 
   // Billing expression simulation diagnostics and conditional labels.
   'Outside these times: {{condition}}',
+  '{{window}}, except {{dates}}',
+  'All other times, including weekends and {{dates}}',
+  'Calendar year',
   '{{first}} and {{second}}',
   '{{first}} or {{second}}',
   '{{condition}} ({{timezone}})',

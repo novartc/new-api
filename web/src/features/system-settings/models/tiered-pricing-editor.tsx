@@ -934,7 +934,7 @@ Important: len is NOT affected by auto-exclusion. Tier conditions should use len
 - header(name) — reads a request header
 - param(path) — reads a request body JSON path (gjson syntax)
 - has(source, substr) — substring check
-- hour(tz), minute(tz), weekday(tz), month(tz), day(tz) — time functions, tz is a timezone like "Asia/Shanghai"
+- hour(tz), minute(tz), weekday(tz), month(tz), day(tz), year(tz) — time functions, tz is a timezone like "Asia/Shanghai"
 
 ### Price Coefficients
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -140,6 +141,7 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, usedVars map[
 		"weekday": func(tz string) int { return int(timeInZone(tz).Weekday()) },
 		"month":   func(tz string) int { return int(timeInZone(tz).Month()) },
 		"day":     func(tz string) int { return timeInZone(tz).Day() },
+		"year":    func(tz string) int { return timeInZone(tz).Year() },
 		"max":     math.Max,
 		"min":     math.Min,
 		"abs":     math.Abs,
@@ -158,16 +160,33 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, usedVars map[
 	return f, trace, nil
 }
 
+// billingNow is the clock for hour, minute, weekday, month, day, and year.
+// Production always uses time.Now. Tests replace it with SetBillingNowForTest.
+var billingNow atomic.Value // func() time.Time
+
+func init() {
+	billingNow.Store(time.Now)
+}
+
+// SetBillingNowForTest replaces the clock used by the time functions.
+// The returned function restores the previous clock.
+func SetBillingNowForTest(now func() time.Time) func() {
+	previous := billingNow.Load().(func() time.Time)
+	billingNow.Store(now)
+	return func() { billingNow.Store(previous) }
+}
+
 func timeInZone(tz string) time.Time {
+	now := billingNow.Load().(func() time.Time)()
 	tz = strings.TrimSpace(tz)
 	if tz == "" {
-		return time.Now().UTC()
+		return now.UTC()
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		return time.Now().UTC()
+		return now.UTC()
 	}
-	return time.Now().In(loc)
+	return now.In(loc)
 }
 
 func normalizeHeaders(headers map[string]string) map[string]string {

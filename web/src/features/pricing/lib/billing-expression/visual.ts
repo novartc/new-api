@@ -74,6 +74,7 @@ const TIME_DOMAINS: Record<TimeFunction, [number, number]> = {
   weekday: [0, 6],
   month: [1, 12],
   day: [1, 31],
+  year: [1, 9999],
 }
 let nextId = 0
 export function visualNodeId(): string {

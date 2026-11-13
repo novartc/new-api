@@ -2,10 +2,16 @@ package billing_setting
 
 import "github.com/QuantumNous/new-api/constant"
 
+// deepSeekHoliday2027 lists the 2027 Chinese statutory holidays. Every date
+// is a full Beijing day. The 2027 makeup work days (Jan 31, Feb 14, May 8,
+// Sep 26, and Oct 9) are Saturdays or Sundays, so the weekday clause already
+// bills them off-peak all day. Years other than 2027 are not built in.
+const deepSeekHoliday2027 = `year("Asia/Shanghai") == 2027 && ((month("Asia/Shanghai") == 1 && day("Asia/Shanghai") >= 1 && day("Asia/Shanghai") <= 3) || (month("Asia/Shanghai") == 2 && day("Asia/Shanghai") >= 5 && day("Asia/Shanghai") <= 13) || (month("Asia/Shanghai") == 4 && day("Asia/Shanghai") >= 3 && day("Asia/Shanghai") <= 5) || (month("Asia/Shanghai") == 5 && day("Asia/Shanghai") >= 1 && day("Asia/Shanghai") <= 5) || (month("Asia/Shanghai") == 6 && day("Asia/Shanghai") == 9) || (month("Asia/Shanghai") == 9 && day("Asia/Shanghai") == 15) || (month("Asia/Shanghai") == 10 && day("Asia/Shanghai") >= 1 && day("Asia/Shanghai") <= 7))`
+
 // deepSeekPeak is DeepSeek's peak window: Monday to Friday, 09:00-12:00 and
-// 14:00-18:00 Beijing time. The Chinese public holidays DeepSeek bills
-// off-peak are not known in advance and bill at peak here.
-const deepSeekPeak = `weekday("Asia/Shanghai") >= 1 && weekday("Asia/Shanghai") <= 5 && ((hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12) || (hour("Asia/Shanghai") >= 14 && hour("Asia/Shanghai") < 18))`
+// 14:00-18:00 Beijing time, excluding deepSeekHoliday2027. Every other time,
+// including weekends and those holidays, is off-peak.
+const deepSeekPeak = `weekday("Asia/Shanghai") >= 1 && weekday("Asia/Shanghai") <= 5 && !(` + deepSeekHoliday2027 + `) && ((hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12) || (hour("Asia/Shanghai") >= 14 && hour("Asia/Shanghai") < 18))`
 
 const deepSeekFlashExpr = deepSeekPeak + ` ? tier("peak", p * 0.3 + cr * 0.006 + c * 1.2) : tier("off_peak", p * 0.15 + cr * 0.003 + c * 0.6)`
 

@@ -20,6 +20,7 @@ import { createInstance } from 'i18next'
 import { assert, afterEach, describe, expect, test, vi } from 'vitest'
 
 import { getTieredBillingSummary } from '@/features/usage-logs/lib/format'
+import en from '@/i18n/locales/en.json'
 import zh from '@/i18n/locales/zh.json'
 
 import contract from '../../../../../../pkg/billingexpr/testdata/frontend_simulation.json'
@@ -345,27 +346,27 @@ describe('local billing expression evaluation', () => {
     [
       '2026-01-31T16:05:00Z',
       'Asia/Shanghai',
-      { hour: 0, minute: 5, weekday: 0, month: 2, day: 1 },
+      { hour: 0, minute: 5, weekday: 0, month: 2, day: 1, year: 2026 },
     ],
     [
       '2026-03-08T06:59:00Z',
       'America/New_York',
-      { hour: 1, minute: 59, weekday: 0, month: 3, day: 8 },
+      { hour: 1, minute: 59, weekday: 0, month: 3, day: 8, year: 2026 },
     ],
     [
       '2026-03-08T07:00:00Z',
       'America/New_York',
-      { hour: 3, minute: 0, weekday: 0, month: 3, day: 8 },
+      { hour: 3, minute: 0, weekday: 0, month: 3, day: 8, year: 2026 },
     ],
     [
       '2026-09-07T01:02:00Z',
       '',
-      { hour: 1, minute: 2, weekday: 1, month: 9, day: 7 },
+      { hour: 1, minute: 2, weekday: 1, month: 9, day: 7, year: 2026 },
     ],
     [
       '2026-09-07T01:02:00Z',
       'Invalid/Zone',
-      { hour: 1, minute: 2, weekday: 1, month: 9, day: 7 },
+      { hour: 1, minute: 2, weekday: 1, month: 9, day: 7, year: 2026 },
     ],
   ])('resolves the full local date at %s in %s', (now, zone, expected) => {
     expect(timeInBillingZone(new Date(now), zone)).toEqual(expected)
@@ -392,6 +393,49 @@ describe('local billing expression evaluation', () => {
       })
     }
   )
+
+  const holidayDates = '2027-01-01–2027-01-03, 2027-06-09'
+  const holidayPeak = `weekday("Asia/Shanghai") >= 1 && weekday("Asia/Shanghai") <= 5 && !(year("Asia/Shanghai") == 2027 && ((month("Asia/Shanghai") == 1 && day("Asia/Shanghai") >= 1 && day("Asia/Shanghai") <= 3) || (month("Asia/Shanghai") == 6 && day("Asia/Shanghai") == 9))) && ((hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12) || (hour("Asia/Shanghai") >= 14 && hour("Asia/Shanghai") < 18))`
+  const holidayExpression = `${holidayPeak} ? tier("peak", p * 3 + c * 9) : tier("off_peak", p * 1.5 + c * 4.5)`
+
+  test.each([
+    ['2027-01-01T10:00:00+08:00', 'off_peak', 1950],
+    ['2027-06-09T16:00:00+08:00', 'off_peak', 1950],
+    ['2027-01-04T10:00:00+08:00', 'peak', 3900],
+  ])('bills a dated peak window at %s as %s', (now, matchedTier, cost) => {
+    expect(
+      evaluateBillingExpression(holidayExpression, {
+        tokens: { p: 1000, c: 100 },
+        now: new Date(now),
+      })
+    ).toMatchObject({ status: 'success', matchedTier, cost })
+  })
+
+  test('names excluded dates instead of treating them as ordinary off-peak hours', async () => {
+    const english = createInstance()
+    const chinese = createInstance()
+    await english.init({ lng: 'en', resources: { en } })
+    await chinese.init({ lng: 'zh', resources: { zh } })
+    const peak = 'Mon–Fri 09:00–12:00 or 14:00–18:00'
+    expect(formatBillingCondition(holidayPeak, english.t, 'en')).toBe(
+      `${peak}, except ${holidayDates} (Asia/Shanghai)`
+    )
+    expect(formatBillingCondition(`!(${holidayPeak})`, english.t, 'en')).toBe(
+      `All other times, including weekends and ${holidayDates} (Asia/Shanghai)`
+    )
+    expect(formatBillingCondition('year("UTC") == 2027', english.t, 'en')).toBe(
+      'Calendar year: 2027 (UTC)'
+    )
+    expect(formatBillingCondition(holidayPeak, chinese.t, 'zh')).toBe(
+      `周一至周五 09:00至12:00或14:00至18:00，不含${holidayDates}（Asia/Shanghai）`
+    )
+    expect(formatBillingCondition(`!(${holidayPeak})`, chinese.t, 'zh')).toBe(
+      `其余时间，包括周末和${holidayDates}（Asia/Shanghai）`
+    )
+    expect(formatBillingCondition(holidayPeak, chinese.t, 'zh')).not.toContain(
+      'year('
+    )
+  })
 })
 
 describe('visual billing document', () => {

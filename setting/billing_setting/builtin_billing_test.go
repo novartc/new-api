@@ -3,6 +3,7 @@ package billing_setting_test
 import (
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/controller"
@@ -202,6 +203,66 @@ func TestDeepSeekBuiltinBilling(t *testing.T) {
 			}
 		})
 	}
+
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		tier string
+	}{
+		{"2027-01-01 10:00 holiday", time.Date(2027, 1, 1, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-01-01 08:59 holiday", time.Date(2027, 1, 1, 8, 59, 0, 0, shanghai), "off_peak"},
+		{"2027-01-01 09:00 holiday", time.Date(2027, 1, 1, 9, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-01-01 12:00 holiday", time.Date(2027, 1, 1, 12, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-01-01 14:00 holiday", time.Date(2027, 1, 1, 14, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-01-01 18:00 holiday", time.Date(2027, 1, 1, 18, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-02-05 10:00 spring festival", time.Date(2027, 2, 5, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-02-08 10:00 spring festival", time.Date(2027, 2, 8, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-02-12 15:00 spring festival", time.Date(2027, 2, 12, 15, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-04-05 10:00 qingming", time.Date(2027, 4, 5, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-05-03 10:00 labor day", time.Date(2027, 5, 3, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-05-05 17:00 labor day", time.Date(2027, 5, 5, 17, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-06-09 16:00 dragon boat", time.Date(2027, 6, 9, 16, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-09-15 09:00 mid-autumn", time.Date(2027, 9, 15, 9, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-10-01 10:00 national day", time.Date(2027, 10, 1, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-10-07 17:00 national day", time.Date(2027, 10, 7, 17, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-01-31 10:00 makeup sunday", time.Date(2027, 1, 31, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-02-14 15:00 makeup sunday", time.Date(2027, 2, 14, 15, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-05-08 10:00 makeup saturday", time.Date(2027, 5, 8, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-09-26 10:00 makeup sunday", time.Date(2027, 9, 26, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-10-09 10:00 makeup saturday", time.Date(2027, 10, 9, 10, 0, 0, 0, shanghai), "off_peak"},
+		{"2027-01-04 10:00 after new year", time.Date(2027, 1, 4, 10, 0, 0, 0, shanghai), "peak"},
+		{"2027-05-06 10:00 after labor day", time.Date(2027, 5, 6, 10, 0, 0, 0, shanghai), "peak"},
+		{"2027-06-10 16:00 after dragon boat", time.Date(2027, 6, 10, 16, 0, 0, 0, shanghai), "peak"},
+		{"2027-10-08 10:00 between national day and makeup", time.Date(2027, 10, 8, 10, 0, 0, 0, shanghai), "peak"},
+		{"2026-11-13 08:59", time.Date(2026, 11, 13, 8, 59, 0, 0, shanghai), "off_peak"},
+		{"2026-11-13 09:00", time.Date(2026, 11, 13, 9, 0, 0, 0, shanghai), "peak"},
+		{"2026-11-13 12:00", time.Date(2026, 11, 13, 12, 0, 0, 0, shanghai), "off_peak"},
+		{"2026-11-13 14:00", time.Date(2026, 11, 13, 14, 0, 0, 0, shanghai), "peak"},
+		{"2026-11-13 18:00", time.Date(2026, 11, 13, 18, 0, 0, 0, shanghai), "off_peak"},
+		{"2026-11-13 10:00 ordinary friday", time.Date(2026, 11, 13, 10, 0, 0, 0, shanghai), "peak"},
+		{"2028-01-04 10:00 unlisted year", time.Date(2028, 1, 4, 10, 0, 0, 0, shanghai), "peak"},
+		{"2026-12-31 16:00 UTC is shanghai new year", time.Date(2026, 12, 31, 16, 0, 0, 0, time.UTC), "off_peak"},
+		{"2027-01-01 02:00 UTC is shanghai holiday 10:00", time.Date(2027, 1, 1, 2, 0, 0, 0, time.UTC), "off_peak"},
+		{"2027-01-04 02:00 UTC is shanghai 10:00", time.Date(2027, 1, 4, 2, 0, 0, 0, time.UTC), "peak"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			restore := billingexpr.SetBillingNowForTest(func() time.Time { return tc.at })
+			t.Cleanup(restore)
+			for model, want := range map[string]map[string]int{
+				"deepseek-flash":  {"off_peak": 228, "peak": 456},
+				"deepseek-v4-pro": {"off_peak": 847, "peak": 1694},
+			} {
+				expression, ok := billing_setting.GetBillingExpr(model)
+				require.True(t, ok, model)
+				result := quota(expression, chat)
+				assert.Equal(t, tc.tier, result.MatchedTier, model)
+				assert.Equal(t, want[tc.tier], result.ActualQuotaAfterGroup, model)
+			}
+		})
+	}
+
 	for _, model := range []string{"deepseek-search", "deepseek-fetch"} {
 		expression, ok := billing_setting.GetBillingExpr(model)
 		require.True(t, ok, model)

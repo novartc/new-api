@@ -4,6 +4,7 @@ import (
 	"math"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -939,7 +940,7 @@ func TestTimeFunctions_ValidTimezone(t *testing.T) {
 }
 
 func TestTimeFunctions_AllFunctionsCompile(t *testing.T) {
-	exprStr := `tier("default", p) * (hour("Asia/Shanghai") >= 0 ? 1 : 1) * (minute("UTC") >= 0 ? 1 : 1) * (weekday("UTC") >= 0 ? 1 : 1) * (month("UTC") >= 1 ? 1 : 1) * (day("UTC") >= 1 ? 1 : 1)`
+	exprStr := `tier("default", p) * (hour("Asia/Shanghai") >= 0 ? 1 : 1) * (minute("UTC") >= 0 ? 1 : 1) * (weekday("UTC") >= 0 ? 1 : 1) * (month("UTC") >= 1 ? 1 : 1) * (day("UTC") >= 1 ? 1 : 1) * (year("UTC") >= 1 ? 1 : 1)`
 	cost, _, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{P: 500})
 	if err != nil {
 		t.Fatal(err)
@@ -994,6 +995,19 @@ func TestTimeFunctions_WeekdayRange(t *testing.T) {
 	if cost != 100 {
 		t.Errorf("cost = %f, want 100", cost)
 	}
+}
+
+func TestTimeFunctions_YearUsesBillingClock(t *testing.T) {
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+	restore := billingexpr.SetBillingNowForTest(func() time.Time {
+		return time.Date(2027, time.January, 1, 10, 0, 0, 0, shanghai)
+	})
+	t.Cleanup(restore)
+
+	cost, _, err := billingexpr.RunExpr(`tier("default", p) * (year("Asia/Shanghai") == 2027 ? 1 : 2)`, billingexpr.TokenParams{P: 100})
+	require.NoError(t, err)
+	assert.Equal(t, 100.0, cost)
 }
 
 func TestTimeFunctions_MonthDayPattern(t *testing.T) {
